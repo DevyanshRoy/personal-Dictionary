@@ -13,7 +13,7 @@ public:
         for (int i = 0; i < 26; i++) children[i] = nullptr;
         data=ch;
         wordEnd = false;
-        for (int i = 0; i < 26; i++) {
+        for {(int i = 0; i < 26; i++)} {
             children[i] = nullptr;
         }
     }
