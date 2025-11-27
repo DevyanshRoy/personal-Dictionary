@@ -1,251 +1,232 @@
 #include <bits/stdc++.h>
 using namespace std;
 
-struct WordNode 
-{
-    string word;
-    string meaning;
-    WordNode* next;
-};
-
-struct FileNode
-{
-    string filename;
-    WordNode* words;  
-    FileNode* next;
-};
-
-FileNode* fileHead = nullptr;
-
-string getFile(char ch) 
-{
-    ch = tolower(ch);
-    string file = "";
-    file += ch;     
-    file += ".txt"; 
-    return file;
-}
-
-void createFileList()
-{
-    FileNode* prev = nullptr;
-    for(char c = 'a'; c <= 'z'; c++)
-    {
-        FileNode* newFile = new FileNode();
-        newFile->filename = getFile(c);
-        newFile->words = nullptr;
-        newFile->next = nullptr;
-
-        if(fileHead == nullptr) fileHead = newFile;
-        else prev->next = newFile;
-
-        prev = newFile;
+class TrieNode {
+public:
+    TrieNode* children[26];
+    bool wordEnd;
+    char data;
+    string meaning;   
+    TrieNode(char ch) {
+        data = ch;
+        wordEnd = false;
+        for (int i = 0; i < 26; i++) children[i] = nullptr;
     }
+};
+
+class Trie {
+public: 
+    TrieNode* root;
+    Trie() { root = new TrieNode('\0'); }
+
+    void insertHandler(TrieNode* node, string word, int i, string meaning) {      
+        if (i == word.size()) {
+            node->wordEnd = true;
+            node->meaning = meaning; 
+            return;
+        }       
+        int index = word[i] - 'a';
+        TrieNode* child;
+        if (node->children[index] != nullptr) child = node->children[index];
+        else {
+            child = new TrieNode(word[i]);
+            node->children[index] = child;
+        }
+        insertHandler(child, word, i + 1, meaning);
+    }
+
+    void insert(string word, string meaning) { insertHandler(root, word, 0, meaning); }
+
+    bool searchHandler(TrieNode* node, string word, int i) {
+        if (i == word.size()) {
+            cout << "Meaning: " << node->meaning << endl;
+            return node->wordEnd;
+        }
+        int index = word[i] - 'a';
+        if (!node->children[index]) return false;
+        return searchHandler(node->children[index], word, i + 1);
+    }
+
+    bool search(string word) { return searchHandler(root, word, 0); }
+
+    bool isEmpty(TrieNode* node) {
+        for (int i = 0; i < 26; i++)
+            if (node->children[i] != nullptr) return false;
+        return true;
+    }
+
+    bool deleteHandler(TrieNode* node, string &word, int i) {
+        if (i == word.size()) {
+            if (!node->wordEnd) return false;
+            node->wordEnd = false;           
+            return true;
+        }
+        int index = word[i] - 'a';
+        TrieNode* child = node->children[index];
+        if (!child) return false; 
+        bool deleted = deleteHandler(child, word, i + 1);
+        if (deleted && !child->wordEnd && isEmpty(child)) {
+            delete child;
+            node->children[index] = nullptr;
+        }
+        return deleted;
+    }
+
+    void deleteWord(string word) {
+        if (deleteHandler(root, word, 0)) cout << "Deleted the entire word!" << endl;
+        else cout << "Word not found!" << endl;
+    }
+
+    void printAllWords() { printAllWordsHandler(root, ""); }
+
+    void printAllWordsHandler(TrieNode* node, string current) {
+        if (node->wordEnd) cout << current << " : " << node->meaning << endl;
+        for (int i = 0; i < 26; i++)
+            if (node->children[i]) printAllWordsHandler(node->children[i], current + char('a' + i));
+    }
+
+    bool update(string word, string newMeaning) { return updateHandler(root, word, 0, newMeaning); }
+
+    bool updateHandler(TrieNode* node, string word, int i, string newMeaning) {
+        if (i == word.size()) {
+            node->meaning = newMeaning;
+            return node->wordEnd;
+        }
+        int index = word[i] - 'a';
+        if (!node->children[index]) return false;
+        return updateHandler(node->children[index], word, i + 1, newMeaning);
+    }
+
+    void printWordsStartingWith(char ch) {
+        int idx = ch - 'a';
+        if (!root->children[idx]) {
+            cout << "No words starting with " << ch << endl;
+            return;
+        }
+        printAllWordsHandler(root->children[idx], string(1, ch));
+    }
+};
+
+struct FileNode {
+    char ch;
+    string filename;
+    FileNode* next;
+    FileNode(char c) : ch(c), filename(string(1,c) + ".txt"), next(nullptr) {}
+};
+
+FileNode* createFileList() {
+    FileNode* head = new FileNode('a');
+    FileNode* temp = head;
+    for (char c = 'b'; c <= 'z'; c++) {
+        temp->next = new FileNode(c);
+        temp = temp->next;
+    }
+    return head;
 }
 
-void loadFiles() 
-{
-    FileNode* f = fileHead;
-    while(f != nullptr)
-    {
-        ifstream in(f->filename);
-        if(!in) { f = f->next; continue; }
+string getFile(char c, FileNode* head) {
+    FileNode* temp = head;
+    while(temp){
+        if(temp->ch == c) return temp->filename;
+        temp = temp->next;
+    }
+    return "";
+}
+
+void saveToFile(string word, string meaning, FileNode* head) {
+    string fname = getFile(word[0], head);
+    ofstream fout(fname, ios::app);
+    fout << word << " - " << meaning << endl;
+    fout.close();
+}
+
+void loadFilesToTrie(Trie* t, FileNode* head) {
+    FileNode* temp = head;
+    while(temp){
+        ifstream fin(temp->filename);
+        if(!fin){ temp = temp->next; continue; }
 
         string line;
-        WordNode* headWords = nullptr;
-        while(getline(in, line))
-        {
-            int pos = line.find(" - ");
-            if(pos == -1) continue;
-            string w = line.substr(0, pos);
-            string m = line.substr(pos + 3); 
-            WordNode* newNode = new WordNode();
-            newNode->word = w;
-            newNode->meaning = m;
-            newNode->next = headWords;
-            headWords = newNode;
+        while(getline(fin, line)){
+            int bar = line.find(' - ');
+            if(bar == -1) continue;
+            string word = line.substr(0, bar);
+            string meaning = line.substr(bar+1);
+
+            if(word.size() > 0 && isupper(word[0])) word[0] = tolower(word[0]);
+            t->insert(word, meaning);
         }
-        f->words = headWords;
-        in.close();
-        f = f->next;
-    }
-}
-
-void addWord() 
-{
-    string w, m;
-    cout << "Enter word: ";
-    cin >> w;
-    cout << "Enter meaning: ";
-    cin.ignore();
-    getline(cin, m);
-    string file = getFile(w[0]);
-    FileNode* f = fileHead;
-    while(f != nullptr)
-    {
-        if(f->filename == file)
-            break;
-        f = f->next;
-    }
-    WordNode* newNode = new WordNode();
-    newNode->word = w;
-    newNode->meaning = m;
-    newNode->next = f->words;
-    f->words = newNode;
-    ofstream out(file, ios::app);
-    out << w << " - " << m << endl;
-    out.close();
-    cout << "Word added successfully!" << endl;
-}
-
-void searchWord() 
-{
-    string w;
-    cout << "Enter word to search: ";
-    cin >> w;
-    FileNode* f = fileHead;
-    while(f != nullptr)
-    {
-        WordNode* temp = f->words;
-        while(temp != nullptr)
-        {
-            if(temp->word == w)
-            {
-                cout << "Meaning: " << temp->meaning << endl;
-                return;
-            }
-            temp = temp->next;
-        }
-        f = f->next;
-    }
-
-    cout << "Word not found!" << endl;
-}
-
-// Delete a word
-void deleteWord() 
-{
-    string w;
-    cout << "Enter word to delete: ";
-    cin >> w;
-    string file = getFile(w[0]);
-    FileNode* f = fileHead;
-    while(f != nullptr)
-    {
-        if(f->filename == file) break;
-        f = f->next;
-    }
-    if(!f) return;
-    WordNode* temp = f->words;
-    WordNode* prev = nullptr;
-    bool found = false;
-    while(temp != nullptr)
-    {
-        if(temp->word == w)
-        {
-            found = true;
-            if(prev == nullptr) f->words = temp->next;
-            else prev->next = temp->next;
-            delete temp;
-            break;
-        }
-        prev = temp;
-        temp = temp->next;
-    }
-    if(!found)
-    {
-        cout << "Word not found!" << endl;
-        return;
-    }
-    ifstream in(file);
-    ofstream tempFile("temp.txt");
-    string line;
-    while(getline(in, line))
-    {
-        int pos = line.find(" - ");
-        string wordInFile = line.substr(0, pos);
-        if(wordInFile != w) tempFile << line << endl;
-    }
-    in.close();
-    tempFile.close();
-    remove(file.c_str());
-    rename("temp.txt", file.c_str());
-
-    cout << "Word deleted!" << endl;
-}
-
-void showWordsByLetter()
-{
-    char c;
-    cout << "Enter starting letter: ";
-    cin >> c;
-    string file = getFile(c);
-    FileNode* f = fileHead;
-    while(f != nullptr)
-    {
-        if(f->filename == file) break;
-        f = f->next;
-    }
-    if(!f || !f->words) { cout << "No words found." << endl; return; }
-    WordNode* temp = f->words;
-    while(temp != nullptr)
-    {
-        cout << temp->word << " - " << temp->meaning << endl;
+        fin.close();
         temp = temp->next;
     }
 }
 
-void showAllWords() 
-{
-    FileNode* f = fileHead;
-    bool any = false;
-    while(f != nullptr)
-    {
-        WordNode* temp = f->words;
-        while(temp != nullptr)
-        {
-            cout << temp->word << " - " << temp->meaning << endl;
-            temp = temp->next;
-            any = true;
-        }
-        f = f->next;
-    }
-    if(!any) cout << "No words found." << endl;
-}
+int main(){
+    Trie* t = new Trie();
+    FileNode* fHead = createFileList();
+    loadFilesToTrie(t, fHead);
 
-int main() 
-{
-    createFileList();
-    loadFiles();
-    int choice;
-    while(true)
-    {
-        cout << "+-+-+-+-+DICTIONARY MENU+-+-+-+-+" << endl;
-        cout << "1. Add a word" << endl;
-        cout << "2. Search a word" << endl;
-        cout << "3. Delete a word" << endl;
-        cout << "4. Show words starting from a letter" << endl;
-        cout << "5. Show all words" << endl;
-        cout << "6. Exit" << endl;
-        cout << "Enter your choice: ";
+    int running = 1, choice;
+    string word, meaning;
+    char ch;
+
+    cout <<"Welcome to the Dictionary Application"<<endl;
+    cout<< "All words are to be inserted lowercase letters"<<endl;
+
+    while(running){
+        cout <<"Enter your choice"<<endl;
+        cout <<"1. Add a word"<<endl;
+        cout <<"2. Search a word"<<endl;
+        cout <<"3. Update a word meaning"<<endl;
+        cout <<"4. Show words starting from a letter"<<endl;
+        cout <<"5. Show all words"<<endl;
+        cout <<"6. Delete a word"<<endl;
+        cout <<"7. Exit"<<endl;
         cin >> choice;
-        switch(choice)
-        {
-            case 1: addWord(); 
-            break;
-            case 2: searchWord(); 
-            break;
-            case 3: deleteWord(); 
-            break;
-            case 4: showWordsByLetter(); 
-            break;
-            case 5: showAllWords(); 
-            break;
-            case 6: cout << "Exiting program..." << endl; 
-            return 0;
-            default: cout << "Invalid choice! Please try again." << endl;
+
+        switch(choice){
+            case 1:
+                cout << "Enter word to insert: "; cin >> word;
+                cout << "Enter meaning: ";
+                cin.ignore(numeric_limits<streamsize>::max(), '\n');
+                getline(cin, meaning);
+                if(!word.empty() && isupper(word[0])) word[0] = tolower(word[0]);
+                t->insert(word, meaning);
+                saveToFile(word, meaning, fHead);
+                break;
+            case 2:
+                cout << "Enter word to search: "; cin >> word;
+                if(!word.empty() && isupper(word[0])) word[0] = tolower(word[0]);
+                if(!t->search(word)) cout << "Word not found" << endl;
+                break;
+            case 3:
+                cout << "Enter word to update: "; cin >> word;
+                cout << "Enter updated meaning: ";
+                cin.ignore(numeric_limits<streamsize>::max(), '\n');
+                getline(cin, meaning);
+                if(!word.empty() && isupper(word[0])) word[0] = tolower(word[0]);
+                t->update(word, meaning);
+                cout << "Updated!" << endl;
+                break;
+            case 4:
+                cout << "Enter starting letter: "; cin >> ch;
+                if(isupper(ch)) ch = tolower(ch);
+                t->printWordsStartingWith(ch);
+                break;
+            case 5:
+                t->printAllWords();
+                break;
+            case 6:
+                cout << "Enter word to delete: "; cin >> word;
+                if(!word.empty() && isupper(word[0])) word[0] = tolower(word[0]);
+                t->deleteWord(word);
+                break;
+            case 7:
+                running = 0;
+                cout << "Exited" << endl;
+                break;
+            default:
+                cout << "Invalid choice" << endl;
         }
     }
-
-    return 0;
 }
